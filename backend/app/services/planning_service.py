@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from app.core.config import settings
 from app.llm.client import PlannerContext
 from app.llm.planner import LLMPlanner, MockPlannerBackend
+from app.llm.backends.ollama_backend import OllamaPlannerBackend
 from app.llm.tools.calendar_tool import CalendarTool
 from app.llm.tools.preferences_tool import PreferencesTool
 from app.llm.tools.search_tool import SearchTool
@@ -17,7 +18,12 @@ class PlanningService:
         self._seed_calendar()
         self.search_tool = SearchTool()
         self.preferences_tool = PreferencesTool()
-        self.planner = LLMPlanner(backend=MockPlannerBackend())
+        backend = (
+            OllamaPlannerBackend()
+            if settings.llm_provider.lower() == "ollama"
+            else MockPlannerBackend()
+        )
+        self.planner = LLMPlanner(backend=backend)
 
     def _seed_calendar(self) -> None:
         today = date.today()

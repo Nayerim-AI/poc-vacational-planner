@@ -1,4 +1,10 @@
 from functools import lru_cache
+
+try:  # optional dependency
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - fallback when dotenv missing
+    load_dotenv = None
+
 from pydantic import BaseSettings, Field
 
 
@@ -12,12 +18,13 @@ class Settings(BaseSettings):
     ollama_model: str = Field("llama3", env="OLLAMA_MODEL")
 
     class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+        case_sensitive = False
 
 
 @lru_cache()
 def get_settings() -> Settings:
+    if load_dotenv:
+        load_dotenv(".env")
     return Settings()
 
 
