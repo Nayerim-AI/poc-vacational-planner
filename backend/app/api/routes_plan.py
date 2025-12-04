@@ -20,8 +20,15 @@ def create_plan(
     preferences: Preferences,
     service: PlanningService = Depends(get_planning_service),
 ) -> PlanResponse:
-    plan = service.plan_trip(user_id=settings.default_user_id, preferences=preferences)
-    return PlanResponse(plan=plan)
+    try:
+        plan = service.plan_trip(
+            user_id=settings.default_user_id, preferences=preferences
+        )
+        return PlanResponse(plan=plan)
+    except ValueError as exc:
+        # Planner surfaced a validation issue (e.g., no available dates)
+        friendly = "Tanggal yang diminta tidak tersedia atau Anda sedang sibuk."
+        raise HTTPException(status_code=400, detail=friendly) from exc
 
 
 @router.get("/{trip_id}", response_model=TripPlanSchema)
