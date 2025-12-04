@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
@@ -40,6 +41,8 @@ class RAGTool:
         self.documents: List[RAGDocument] = []
         self.index = None
         self.use_faiss = faiss is not None
+        self.gpu_enabled = False
+        self.use_gpu_flag = os.getenv("RAG_USE_GPU", "0").lower() in {"1", "true", "yes"}
 
     def load_dir(self, glob: str = "*.txt") -> None:
         if not self.store_path.exists():
@@ -62,7 +65,19 @@ class RAGTool:
         self.documents.extend(docs)
         if self.use_faiss:
             if self.index is None:
-                self.index = faiss.IndexFlatIP(self.dim)
+                base_index = faiss.IndexFlatIP(self.dim)
+                # Try GPU device 1; fallback to CPU if unavailable or GPU bindings missing.
+                if self.use_gpu_flag and hasattr(faiss, "StandardGpuResources"):
+                    try:
+                        res = faiss.StandardGpuResources()
+                        self.index = faiss.index_cpu_to_gpu(res, 1, base_index)
+                        self.gpu_enabled = True
+                        logger.info("RAG FAISS using GPU device 1")
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("FAISS GPU unavailable, falling back to CPU: %s", exc)
+                        self.index = base_index
+                else:
+                    self.index = base_index
             self.index.add(embeddings)
         else:
             # Fallback: store embeddings for manual similarity
