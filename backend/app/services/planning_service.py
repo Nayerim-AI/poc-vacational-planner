@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from app.llm.tools.rag_store import RAGTool
 from app.models.schemas import Preferences, TripPlanSchema
 from app.storage.repository import InMemoryRepository
 
+logger = logging.getLogger(__name__)
+
 
 class PlanningService:
     def __init__(self, repository: InMemoryRepository):
@@ -22,12 +25,17 @@ class PlanningService:
         self.search_tool = SearchTool()
         self.preferences_tool = PreferencesTool()
         self.rag_tool = self._init_rag_tool()
-        backend = (
+        primary_backend = (
             OllamaPlannerBackend()
             if settings.llm_provider.lower() == "ollama"
             else MockPlannerBackend()
         )
-        self.planner = LLMPlanner(backend=backend)
+        self.planner = LLMPlanner(backend=primary_backend)
+        self.fallback_planner = (
+            LLMPlanner(backend=MockPlannerBackend())
+            if not isinstance(primary_backend, MockPlannerBackend)
+            else None
+        )
 
     def _seed_calendar(self) -> None:
         today = date.today()
@@ -61,6 +69,13 @@ class PlanningService:
             search_tool=self.search_tool,
             rag_tool=self.rag_tool,
         )
-        plan = self.planner.plan(context)
+        try:
+            plan = self.planner.plan(context)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Primary planner failed, fallback to mock: %s", exc)
+            if self.fallback_planner:
+                plan = self.fallback_planner.plan(context)
+            else:
+                raise
         self.repository.save_plan(plan)
         return TripPlanSchema.from_domain(plan)
