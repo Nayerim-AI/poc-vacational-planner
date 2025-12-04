@@ -37,6 +37,29 @@ class OllamaPlannerBackend(PlannerBackend):
         prefs = context.preferences
         catalog = context.search_tool.catalog  # small enough for prompt
         calendar_hint = self._calendar_hint(context)
+        example = {
+            "destination": "Lisbon",
+            "start_date": "2025-06-01",
+            "end_date": "2025-06-04",
+            "days": [
+                {
+                    "date": "2025-06-01",
+                    "activities": [
+                        {
+                            "time_of_day": "morning",
+                            "title": "Sample activity",
+                            "description": "Short description",
+                            "cost_estimate": 50,
+                            "booking_required": False,
+                        }
+                    ],
+                }
+            ],
+            "budget_summary": {
+                "total_estimated": 800,
+                "breakdown": {"flight": 400, "hotel": 300, "activities": 100},
+            },
+        }
         schema_hint = {
             "destination": "string",
             "start_date": "YYYY-MM-DD",
@@ -77,7 +100,9 @@ class OllamaPlannerBackend(PlannerBackend):
                 "role": "user",
                 "content": "Return a valid TripPlan JSON object only (no prose). "
                 "Follow the schema keys exactly. Input:\n"
-                + json.dumps(user_block, default=str),
+                + json.dumps(user_block, default=str)
+                + "\nExample structure (adapt values to preferences):\n"
+                + json.dumps(example),
             },
         ]
 
