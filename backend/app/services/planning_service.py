@@ -158,7 +158,9 @@ class PlanningService:
         hotel = float(breakdown.get("hotel", 0.0))
         breakdown["activities"] = activity_total
         plan.budget_summary.breakdown = breakdown
-        plan.budget_summary.total_estimated = flight + hotel + activity_total
+        new_total = flight + hotel + activity_total
+        prev_total = plan.budget_summary.total_estimated or new_total
+        plan.budget_summary.total_estimated = min(new_total, prev_total)
 
     def plan_trip(self, user_id: str, preferences: Preferences) -> TripPlanSchema:
         merged_preferences = self.preferences_tool.merge_with_defaults(preferences)
@@ -177,5 +179,6 @@ class PlanningService:
                 plan = self.fallback_planner.plan(context)
             else:
                 raise
+        plan = self._fill_empty_days(plan)
         self.repository.save_plan(plan)
         return TripPlanSchema.from_domain(plan)
