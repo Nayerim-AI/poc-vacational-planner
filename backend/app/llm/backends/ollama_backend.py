@@ -87,6 +87,11 @@ class OllamaPlannerBackend(PlannerBackend):
         return self._to_domain(data, user_id=context.user_id)
 
     def _to_domain(self, data: dict, user_id: str) -> TripPlan:
+        required = ["destination", "start_date", "end_date", "days", "budget_summary"]
+        missing = [k for k in required if k not in data]
+        if missing:
+            raise ValueError(f"LLM response missing fields: {missing}")
+
         def _parse_date(value) -> date:
             if isinstance(value, date):
                 return value
