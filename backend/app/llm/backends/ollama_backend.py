@@ -37,6 +37,29 @@ class OllamaPlannerBackend(PlannerBackend):
         prefs = context.preferences
         catalog = context.search_tool.catalog  # small enough for prompt
         calendar_hint = self._calendar_hint(context)
+        schema_hint = {
+            "destination": "string",
+            "start_date": "YYYY-MM-DD",
+            "end_date": "YYYY-MM-DD",
+            "days": [
+                {
+                    "date": "YYYY-MM-DD",
+                    "activities": [
+                        {
+                            "time_of_day": "morning|afternoon|evening",
+                            "title": "string",
+                            "description": "string",
+                            "cost_estimate": "number",
+                            "booking_required": "bool",
+                        }
+                    ],
+                }
+            ],
+            "budget_summary": {
+                "total_estimated": "number",
+                "breakdown": {"flight": "number", "hotel": "number", "activities": "number"},
+            },
+        }
         user_block = {
             "preferences": _serialize_preferences(prefs),
             "catalog": catalog,
@@ -46,12 +69,14 @@ class OllamaPlannerBackend(PlannerBackend):
                 "min_days": prefs.min_duration_days,
                 "max_days": prefs.max_duration_days,
             },
+            "schema": schema_hint,
         }
         return [
             {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": "Return a valid TripPlan JSON object only (no prose). Input:\n"
+                "content": "Return a valid TripPlan JSON object only (no prose). "
+                "Follow the schema keys exactly. Input:\n"
                 + json.dumps(user_block, default=str),
             },
         ]
@@ -67,10 +92,30 @@ class OllamaPlannerBackend(PlannerBackend):
 
     def generate_plan(self, context: PlannerContext) -> TripPlan:
         messages = self._build_messages(context)
-        payload = {"model": settings.ollama_model, "messages": messages, "stream": False}
+        data = self._call_model(messages)
+        try:
+            return self._to_domain(data, user_id=context.user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Ollama response invalid, retrying with strict JSON ask: %s", exc)
+            retry_messages = messages + [
+                {
+                    "role": "user",
+                    "content": "Your last reply was invalid. Respond with JSON ONLY, matching the TripPlan schema keys.",
+                }
+            ]
+            data = self._call_model(retry_messages)
+            return self._to_domain(data, user_id=context.user_id)
+
+    def _call_model(self, messages: List[dict]) -> dict:
+        payload = {
+            "model": settings.ollama_model,
+            "messages": messages,
+            "stream": False,
+            "format": "json",
+        }
         try:
             resp = requests.post(
-                f"{settings.ollama_host}/api/chat", json=payload, timeout=30
+                f"{settings.ollama_host}/api/chat", json=payload, timeout=45
             )
             resp.raise_for_status()
         except Exception as exc:  # noqa: BLE001
@@ -79,12 +124,10 @@ class OllamaPlannerBackend(PlannerBackend):
 
         content = resp.json().get("message", {}).get("content", "")
         try:
-            data = json.loads(content)
+            return json.loads(content)
         except json.JSONDecodeError as exc:
             logger.error("Invalid JSON from model: %s", content)
             raise ValueError("LLM returned invalid JSON") from exc
-
-        return self._to_domain(data, user_id=context.user_id)
 
     def _to_domain(self, data: dict, user_id: str) -> TripPlan:
         required = ["destination", "start_date", "end_date", "days", "budget_summary"]
