@@ -46,5 +46,6 @@ pytest
 - `app/models`: Domain entities and Pydantic schemas for API.
 - `app/api`: FastAPI routes for planning, booking, and health checks.
 - `frontend/`: Streamlit PoC UI to submit preferences, view plan, and trigger simulated bookings.
+- Calendar ICS: set `CALENDAR_ICS_URL` in `.env` (e.g., public/secret Google Calendar ICS) and backend will ingest busy slots on startup. Keep secret ICS URLs out of logs and never expose to clients.
 
 Authentication/authorization is not implemented (single demo user). Do not store real payment data; bookings are simulated.

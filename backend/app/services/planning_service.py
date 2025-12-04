@@ -16,6 +16,7 @@ class PlanningService:
         self.repository = repository
         self.calendar_tool = CalendarTool()
         self._seed_calendar()
+        self._load_calendar_from_ics()
         self.search_tool = SearchTool()
         self.preferences_tool = PreferencesTool()
         backend = (
@@ -32,6 +33,13 @@ class PlanningService:
             (today + timedelta(days=20), today + timedelta(days=22)),
         ]
         self.calendar_tool.seed_busy_ranges(settings.default_user_id, busy_ranges)
+
+    def _load_calendar_from_ics(self) -> None:
+        if settings.calendar_ics_url:
+            self.calendar_tool.load_from_ics(
+                user_id=settings.default_user_id,
+                url=settings.calendar_ics_url,
+            )
 
     def plan_trip(self, user_id: str, preferences: Preferences) -> TripPlanSchema:
         merged_preferences = self.preferences_tool.merge_with_defaults(preferences)
