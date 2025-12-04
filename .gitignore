@@ -1,0 +1,14 @@
+# Python/venv
+*.pyc
+__pycache__/
+.venv/
+venv/
+
+# Env
+.env
+
+# Node/Streamlit artifacts
+frontend/.streamlit/
+
+# Pytest cache
+.pytest_cache/
