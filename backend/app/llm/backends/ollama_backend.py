@@ -37,29 +37,6 @@ class OllamaPlannerBackend(PlannerBackend):
         prefs = context.preferences
         catalog = context.search_tool.catalog  # small enough for prompt
         calendar_hint = self._calendar_hint(context)
-        example = {
-            "destination": "Lisbon",
-            "start_date": "2025-06-01",
-            "end_date": "2025-06-04",
-            "days": [
-                {
-                    "date": "2025-06-01",
-                    "activities": [
-                        {
-                            "time_of_day": "morning",
-                            "title": "Sample activity",
-                            "description": "Short description",
-                            "cost_estimate": 50,
-                            "booking_required": False,
-                        }
-                    ],
-                }
-            ],
-            "budget_summary": {
-                "total_estimated": 800,
-                "breakdown": {"flight": 400, "hotel": 300, "activities": 100},
-            },
-        }
         schema_hint = {
             "destination": "string",
             "start_date": "YYYY-MM-DD",
@@ -98,11 +75,12 @@ class OllamaPlannerBackend(PlannerBackend):
             {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": "Return a valid TripPlan JSON object only (no prose). "
-                "Follow the schema keys exactly. Input:\n"
-                + json.dumps(user_block, default=str)
-                + "\nExample structure (adapt values to preferences):\n"
-                + json.dumps(example),
+                "content": (
+                    "Return a valid TripPlan JSON object only (no prose). "
+                    "Follow the schema keys exactly. Every day between start_date and end_date must include 1-3 activities; no empty activities lists are allowed. "
+                    "Do not use placeholders (e.g., 'Sample activity', 'Short description'). Prefer activities from the provided catalog or RAG summaries; do not invent generic filler. Input:\n"
+                    + json.dumps(user_block, default=str)
+                ),
             },
         ]
 
@@ -148,6 +126,7 @@ class OllamaPlannerBackend(PlannerBackend):
             raise
 
         content = resp.json().get("message", {}).get("content", "")
+        logger.info("RAW OLLAMA RESPONSE: %s", content)
         try:
             return json.loads(content)
         except json.JSONDecodeError as exc:

@@ -13,6 +13,7 @@ from app.llm.tools.rag_store import RAGTool
 from app.models.schemas import Preferences, TripPlanSchema
 from app.models.domain import Activity, DayPlan
 from app.storage.repository import InMemoryRepository
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class PlanningService:
         """If planner returns empty activities, backfill from RAG or catalog to avoid blank days."""
         activity_pool: list[dict] = []
         if self.rag_tool:
-            hits = self.rag_tool.search(plan.destination, top_k=5)
+            hits = self.rag_tool.search(plan.destination, top_k=10)
             for text, _ in hits:
                 for line in text.splitlines():
                     parts = [p.strip() for p in line.split("|")]
@@ -73,10 +74,10 @@ class PlanningService:
                         continue
                     activity_pool.append(
                         {
-                            "time_of_day": "morning",
+                            "time_of_day": self._parse_time(parts[3] if len(parts) > 3 else None),
                             "title": parts[0],
                             "description": parts[1],
-                            "cost_estimate": 50.0,
+                            "cost_estimate": self._parse_cost(parts[2] if len(parts) > 2 else None),
                             "booking_required": False,
                         }
                     )
@@ -84,31 +85,80 @@ class PlanningService:
             dest = self.search_tool.lookup_destination(plan.destination)
             activity_pool = dest.get("activities", [])
 
-        if not activity_pool:
-            return plan
-
         fixed_days: list[DayPlan] = []
         for idx, day in enumerate(plan.days):
-            if day.activities:
-                fixed_days.append(day)
+            activities = [
+                a for a in getattr(day, "activities", []) if not self._is_placeholder(a.title, a.description)
+            ]
+            if activities:
+                fixed_days.append(DayPlan(date=day.date, activities=activities))
                 continue
-            source = activity_pool[idx % len(activity_pool)]
+            source = activity_pool[idx % len(activity_pool)] if activity_pool else self._synth_activity(plan.destination)
             fixed_days.append(
                 DayPlan(
                     date=day.date,
                     activities=[
                         Activity(
-                            time_of_day=source.get("time_of_day", "morning"),
-                            title=source.get("title", "Activity"),
-                            description=source.get("description", ""),
-                            cost_estimate=float(source.get("cost_estimate", 0.0)),
+                            time_of_day=source.get("time_of_day") or "morning",
+                            title=source.get("title") or self._synthetic_title(plan.destination),
+                            description=source.get("description") or self._synthetic_description(plan.destination),
+                            cost_estimate=float(source.get("cost_estimate") or 50.0),
                             booking_required=bool(source.get("booking_required", False)),
                         )
                     ],
                 )
             )
         plan.days = fixed_days
+        self._rebalance_budget(plan)
         return plan
+
+    @staticmethod
+    def _is_placeholder(title: str, description: str) -> bool:
+        combined = (title or "") + " " + (description or "")
+        return any(token in combined.lower() for token in ["sample activity", "short description", "placeholder"])
+
+    @staticmethod
+    def _parse_cost(raw: str | None) -> float:
+        if not raw:
+            return 0.0
+        match = re.search(r"(\\d+(?:\\.\\d+)?)", raw.replace(",", ""))
+        return float(match.group(1)) if match else 0.0
+
+    @staticmethod
+    def _parse_time(raw: str | None) -> str | None:
+        if not raw:
+            return None
+        lower = raw.lower()
+        for slot in ["morning", "afternoon", "evening"]:
+            if slot in lower:
+                return slot
+        return None
+
+    @staticmethod
+    def _synthetic_title(destination: str) -> str:
+        return f"{destination} city walk"
+
+    @staticmethod
+    def _synthetic_description(destination: str) -> str:
+        return f"Explore notable spots in {destination}, with local food or views."
+
+    def _synth_activity(self, destination: str) -> dict:
+        return {
+            "time_of_day": "afternoon",
+            "title": self._synthetic_title(destination),
+            "description": self._synthetic_description(destination),
+            "cost_estimate": 60.0,
+            "booking_required": False,
+        }
+
+    def _rebalance_budget(self, plan) -> None:
+        activity_total = sum(a.cost_estimate for d in plan.days for a in d.activities)
+        breakdown = plan.budget_summary.breakdown or {}
+        flight = float(breakdown.get("flight", 0.0))
+        hotel = float(breakdown.get("hotel", 0.0))
+        breakdown["activities"] = activity_total
+        plan.budget_summary.breakdown = breakdown
+        plan.budget_summary.total_estimated = flight + hotel + activity_total
 
     def plan_trip(self, user_id: str, preferences: Preferences) -> TripPlanSchema:
         merged_preferences = self.preferences_tool.merge_with_defaults(preferences)
