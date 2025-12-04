@@ -12,6 +12,7 @@ A PoC vacation planner that collects user preferences, checks calendar availabil
 - **FastAPI backend** (`backend/main.py`) exposes planning, booking, and health endpoints.
 - **LLM layer** (`app/llm`) with `LLMClient` abstraction and `MockPlannerBackend` for deterministic planning; prompts are stored separately for future real-model swaps.
 - **Tools** (`app/llm/tools`): calendar (availability), search (destinations catalog), preferences (merge defaults), booking (simulate reservations).
+- **RAG** (`app/llm/tools/rag_store.py`): optional FAISS-backed store that loads `.txt` docs from `RAG_DOCS_PATH` (default `/extracted`) and surfaces top snippets to the planner.
 - **Services** (`app/services`): orchestrate planner and booking flows, interact with storage.
 - **Storage** (`app/storage`): in-memory repository for plans and booking records.
 - **Models** (`app/models`): domain dataclasses and Pydantic schemas for requests/responses.

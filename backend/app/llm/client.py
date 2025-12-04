@@ -15,6 +15,7 @@ class PlannerContext:
     preferences: "Preferences"
     calendar_tool: "CalendarTool"
     search_tool: "SearchTool"
+    rag_tool: "RAGTool | None" = None
 
 
 class LLMClient:

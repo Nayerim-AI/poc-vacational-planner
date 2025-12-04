@@ -12,3 +12,7 @@ frontend/.streamlit/
 
 # Pytest cache
 .pytest_cache/
+
+# Data/RAG artifacts
+backend/extracted/
+backend/*.bz2

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     ollama_model: str = Field("llama3", env="OLLAMA_MODEL")
     calendar_ics_url: str | None = Field(None, env="CALENDAR_ICS_URL")
     makcorps_jwt: str | None = Field(None, env="MAKCORPS_JWT")
+    rag_docs_path: str = Field("/extracted", env="RAG_DOCS_PATH")
 
     class Config:
         case_sensitive = False

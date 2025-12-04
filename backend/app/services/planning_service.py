@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from pathlib import Path
 
 from app.core.config import settings
 from app.llm.client import PlannerContext
@@ -7,6 +8,7 @@ from app.llm.backends.ollama_backend import OllamaPlannerBackend
 from app.llm.tools.calendar_tool import CalendarTool
 from app.llm.tools.preferences_tool import PreferencesTool
 from app.llm.tools.search_tool import SearchTool
+from app.llm.tools.rag_store import RAGTool
 from app.models.schemas import Preferences, TripPlanSchema
 from app.storage.repository import InMemoryRepository
 
@@ -19,6 +21,7 @@ class PlanningService:
         self._load_calendar_from_ics()
         self.search_tool = SearchTool()
         self.preferences_tool = PreferencesTool()
+        self.rag_tool = self._init_rag_tool()
         backend = (
             OllamaPlannerBackend()
             if settings.llm_provider.lower() == "ollama"
@@ -41,6 +44,14 @@ class PlanningService:
                 url=settings.calendar_ics_url,
             )
 
+    def _init_rag_tool(self) -> RAGTool | None:
+        path = Path(settings.rag_docs_path)
+        if not path.exists():
+            return None
+        rag = RAGTool(store_path=path)
+        rag.load_dir()
+        return rag
+
     def plan_trip(self, user_id: str, preferences: Preferences) -> TripPlanSchema:
         merged_preferences = self.preferences_tool.merge_with_defaults(preferences)
         context = PlannerContext(
@@ -48,6 +59,7 @@ class PlanningService:
             preferences=merged_preferences,
             calendar_tool=self.calendar_tool,
             search_tool=self.search_tool,
+            rag_tool=self.rag_tool,
         )
         plan = self.planner.plan(context)
         self.repository.save_plan(plan)

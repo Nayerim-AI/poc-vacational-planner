@@ -47,5 +47,6 @@ pytest
 - `app/api`: FastAPI routes for planning, booking, and health checks.
 - `frontend/`: Streamlit PoC UI to submit preferences, view plan, and trigger simulated bookings.
 - Calendar ICS: set `CALENDAR_ICS_URL` in `.env` (e.g., public/secret Google Calendar ICS) and backend will ingest busy slots on startup. Keep secret ICS URLs out of logs and never expose to clients.
+- RAG (optional): place `.txt` files under path in `RAG_DOCS_PATH` (default `/extracted`) to index lightweight context (FAISS if available, fallback otherwise). Planner will sprinkle top snippet into activity descriptions.
 
 Authentication/authorization is not implemented (single demo user). Do not store real payment data; bookings are simulated.

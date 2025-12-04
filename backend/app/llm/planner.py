@@ -33,11 +33,15 @@ class MockPlannerBackend(PlannerBackend):
         day_count = (end_date - start_date).days + 1
         destination_data = context.search_tool.lookup_destination(destination)
         activities = destination_data["activities"]
+        rag_tip = self._rag_tip(context, destination)
 
         day_plans: List[DayPlan] = []
         for i in range(day_count):
             current_date = start_date + timedelta(days=i)
             activity = activities[i % len(activities)]
+            description = activity["description"]
+            if rag_tip:
+                description = f"{description} | Local tip: {rag_tip}"
             day_plans.append(
                 DayPlan(
                     date=current_date,
@@ -45,7 +49,7 @@ class MockPlannerBackend(PlannerBackend):
                         Activity(
                             time_of_day="morning",
                             title=activity["title"],
-                            description=activity["description"],
+                            description=description,
                             cost_estimate=activity["price"],
                             booking_required=activity["booking_required"],
                         )
@@ -72,6 +76,16 @@ class MockPlannerBackend(PlannerBackend):
             days=day_plans,
             budget_summary=budget_summary,
         )
+
+    def _rag_tip(self, context: PlannerContext, destination: str) -> Optional[str]:
+        if not context.rag_tool:
+            return None
+        hits = context.rag_tool.search(destination, top_k=1)
+        if not hits:
+            return None
+        snippet = hits[0][0].strip()
+        # Use first line to keep context small
+        return snippet.splitlines()[0][:200]
 
     def _select_destination(
         self, preferences: Preferences, search_tool: "SearchTool"
