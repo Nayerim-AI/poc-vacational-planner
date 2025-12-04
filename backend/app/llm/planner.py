@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import List, Optional, Tuple
@@ -32,13 +33,13 @@ class MockPlannerBackend(PlannerBackend):
         start_date, end_date = self._select_dates(preferences, context.calendar_tool)
         day_count = (end_date - start_date).days + 1
         destination_data = context.search_tool.lookup_destination(destination)
-        activities = destination_data["activities"]
+        activities_pool = self._activity_pool(context, destination, destination_data)
         rag_tip = self._rag_tip(context, destination)
 
         day_plans: List[DayPlan] = []
         for i in range(day_count):
             current_date = start_date + timedelta(days=i)
-            activity = activities[i % len(activities)]
+            activity = activities_pool[i % len(activities_pool)]
             description = activity["description"]
             if rag_tip:
                 description = f"{description} | Local tip: {rag_tip}"
@@ -76,6 +77,61 @@ class MockPlannerBackend(PlannerBackend):
             days=day_plans,
             budget_summary=budget_summary,
         )
+
+    def _activity_pool(
+        self, context: PlannerContext, destination: str, destination_data: dict
+    ) -> List[dict]:
+        rag_activities = self._activities_from_rag(context, destination)
+        if rag_activities:
+            return rag_activities
+        return destination_data["activities"]
+
+    def _activities_from_rag(self, context: PlannerContext, destination: str) -> List[dict]:
+        if not context.rag_tool:
+            return []
+        hits = context.rag_tool.search(destination, top_k=5)
+        activities: List[dict] = []
+        for text, _score in hits:
+            for line in text.splitlines():
+                parts = [p.strip() for p in line.split("|")]
+                if len(parts) < 2:
+                    continue
+                title = parts[0]
+                description = parts[1]
+                cost = self._parse_cost(parts[2] if len(parts) > 2 else None)
+                time_of_day = self._parse_time(parts[3] if len(parts) > 3 else None)
+                activities.append(
+                    {
+                        "time_of_day": time_of_day or "morning",
+                        "title": title,
+                        "description": description,
+                        "cost_estimate": cost or 50.0,
+                        "booking_required": False,
+                    }
+                )
+        return activities
+
+    @staticmethod
+    def _parse_cost(raw: Optional[str]) -> Optional[float]:
+        if not raw:
+            return None
+        match = re.search(r"(\d+(?:\.\d+)?)", raw.replace(",", ""))
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _parse_time(raw: Optional[str]) -> Optional[str]:
+        if not raw:
+            return None
+        lower = raw.lower()
+        for slot in ["morning", "afternoon", "evening"]:
+            if slot in lower:
+                return slot
+        return None
 
     def _rag_tip(self, context: PlannerContext, destination: str) -> Optional[str]:
         if not context.rag_tool:
