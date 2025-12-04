@@ -16,3 +16,6 @@ frontend/.streamlit/
 # Data/RAG artifacts
 backend/extracted/
 backend/*.bz2
+
+# Generated wiki activity candidates
+backend/data/

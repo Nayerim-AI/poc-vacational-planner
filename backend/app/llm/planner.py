@@ -1,4 +1,5 @@
 import logging
+import random
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -48,11 +49,13 @@ class MockPlannerBackend(PlannerBackend):
                     date=current_date,
                     activities=[
                         Activity(
-                            time_of_day="morning",
-                            title=activity["title"],
+                            time_of_day=activity.get("time_of_day", "morning"),
+                            title=activity.get("title", "Activity"),
                             description=description,
-                            cost_estimate=activity["price"],
-                            booking_required=activity["booking_required"],
+                            cost_estimate=activity.get(
+                                "cost_estimate", activity.get("price", 50.0)
+                            ),
+                            booking_required=activity.get("booking_required", False),
                         )
                     ],
                 )
@@ -81,10 +84,31 @@ class MockPlannerBackend(PlannerBackend):
     def _activity_pool(
         self, context: PlannerContext, destination: str, destination_data: dict
     ) -> List[dict]:
+        curated = []
+        for act in destination_data.get("activities", []):
+            curated.append(
+                {
+                    "time_of_day": act.get("time_of_day", "morning"),
+                    "title": act.get("title", "Activity"),
+                    "description": act.get("description", ""),
+                    "cost_estimate": act.get("price", act.get("cost_estimate", 50.0)),
+                    "booking_required": act.get("booking_required", False),
+                }
+            )
         rag_activities = self._activities_from_rag(context, destination)
-        if rag_activities:
-            return rag_activities
-        return destination_data["activities"]
+        pool = curated + rag_activities
+        deduped = []
+        seen_titles = set()
+        for act in pool:
+            title_key = act.get("title", "").lower().strip()
+            if not title_key or title_key in seen_titles:
+                continue
+            seen_titles.add(title_key)
+            deduped.append(act)
+        if not deduped:
+            raise ValueError("No activities available for destination")
+        random.shuffle(deduped)
+        return deduped
 
     def _activities_from_rag(self, context: PlannerContext, destination: str) -> List[dict]:
         if not context.rag_tool:

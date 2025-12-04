@@ -35,7 +35,9 @@ class OllamaPlannerBackend(PlannerBackend):
 
     def _build_messages(self, context: PlannerContext) -> List[dict]:
         prefs = context.preferences
-        catalog = context.search_tool.catalog  # small enough for prompt
+        destination = (prefs.destination_preferences[0] if prefs.destination_preferences else context.search_tool.default_destination())
+        full_catalog = getattr(context.search_tool, "catalog", {})
+        dest_catalog = {destination: full_catalog.get(destination, {})}
         calendar_hint = self._calendar_hint(context)
         schema_hint = {
             "destination": "string",
@@ -62,7 +64,7 @@ class OllamaPlannerBackend(PlannerBackend):
         }
         user_block = {
             "preferences": _serialize_preferences(prefs),
-            "catalog": catalog,
+            "catalog": dest_catalog,
             "calendar_free": calendar_hint,
             "requirements": {
                 "budget_max": prefs.budget_max,
@@ -78,7 +80,10 @@ class OllamaPlannerBackend(PlannerBackend):
                 "content": (
                     "Return a valid TripPlan JSON object only (no prose). "
                     "Follow the schema keys exactly. Every day between start_date and end_date must include 1-3 activities; no empty activities lists are allowed. "
-                    "Do not use placeholders (e.g., 'Sample activity', 'Short description'). Prefer activities from the provided catalog or RAG summaries; do not invent generic filler. Input:\n"
+                    "Use only activities that match the selected destination and do not mix cities. "
+                    "Use the provided catalog and RAG suggestions as anchors/examples, and you MAY propose additional realistic activities for the selected destination based on your travel knowledge, as long as they plausibly exist there and fit the user's preferences and budget. "
+                    "Do NOT use placeholders (e.g., 'Sample activity', 'Short description') and avoid overly generic filler like 'walk around the city' without specifics. "
+                    "Do NOT repeat the exact same activity title on multiple days unless the user explicitly wants that; aim for variety in activity types and times of day. Input:\n"
                     + json.dumps(user_block, default=str)
                 ),
             },

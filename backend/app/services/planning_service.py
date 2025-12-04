@@ -154,8 +154,10 @@ class PlanningService:
     def _rebalance_budget(self, plan) -> None:
         activity_total = sum(a.cost_estimate for d in plan.days for a in d.activities)
         breakdown = plan.budget_summary.breakdown or {}
-        flight = float(breakdown.get("flight", 0.0))
-        hotel = float(breakdown.get("hotel", 0.0))
+        flight_raw = breakdown.get("flight", 0.0)
+        hotel_raw = breakdown.get("hotel", 0.0)
+        flight = float(flight_raw or 0.0)
+        hotel = float(hotel_raw or 0.0)
         breakdown["activities"] = activity_total
         plan.budget_summary.breakdown = breakdown
         new_total = flight + hotel + activity_total

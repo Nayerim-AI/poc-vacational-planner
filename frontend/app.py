@@ -8,19 +8,19 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
 def post_plan(payload: dict) -> dict:
-    resp = requests.post(f"{BACKEND_URL}/plan", json=payload, timeout=15)
+    resp = requests.post(f"{BACKEND_URL}/plan", json=payload, timeout=60)
     resp.raise_for_status()
     return resp.json()
 
 
 def get_plan(trip_id: str) -> dict:
-    resp = requests.get(f"{BACKEND_URL}/plan/{trip_id}", timeout=10)
+    resp = requests.get(f"{BACKEND_URL}/plan/{trip_id}", timeout=60)
     resp.raise_for_status()
     return resp.json()
 
 
 def post_book(trip_id: str) -> dict:
-    resp = requests.post(f"{BACKEND_URL}/plan/{trip_id}/book", timeout=15)
+    resp = requests.post(f"{BACKEND_URL}/plan/{trip_id}/book", timeout=60)
     resp.raise_for_status()
     return resp.json()
 
